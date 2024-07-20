@@ -1,0 +1,31 @@
+pub require "expression/literal"
+
+type Expression {
+  Variable(str),
+  Literal(Literal),
+  Application(Expression, list<Expression>),
+  Lambda(list<str>, Expression)
+}
+
+extend show<Expression> {
+  fn show_prec(x, _) => switch x {
+    case Variable(name) => name
+    case Literal(lit) => show(lit)
+    case Application(f, args) => show(f) + "(" + join_str(args.map(show), ", ") + ")"
+    case Lambda(params, body) => "fn(" + join_str(params, ", ") + ") => " + show(body)
+  }
+}
+
+extend equality<Expression> {
+  fn (==) (x, y) => switch (x, y) {
+    case (Variable(a), Variable(b)) => 
+      a == b
+    case (Literal(a), Literal(b)) => 
+      a == b
+    case (Application(f1, args1), Application(f2, args2)) => 
+      f1 == f2 and args1 == args2
+    case (Lambda(params1, body1), Lambda(params2, body2)) => 
+      params1 == params2 and body1 == body2
+    case _ => false
+  }
+}
