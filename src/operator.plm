@@ -1,0 +1,31 @@
+require "mod:thomasvergne/plume-combinator"
+
+type OperatorFunction<A> {
+  InfixF(Parser<fn(A, A): A>),
+  PrefixF(Parser<fn(A): A>),
+  PostfixF(Parser<fn(A): A>)
+}
+
+fn parseOperators<A extends equality>(ops: [OperatorFunction<A>], next: Parser<A>): Parser<A> =>
+  ops
+    .map(fn (op) => switch op {
+      case InfixF(p) => 
+        next >>= fn(a) =>
+          many1(p >>= fn(f) => next >>= fn(b) => pure((f, b)))
+            >>= fn (pairs) => 
+              pure(pairs.foldl(fn(acc, b) => switch b {
+                case (f, b2) => f(acc, b2)
+              }, a))
+      
+      case PrefixF(p) =>
+        p >>= fn(f) => next >>= fn(a) => pure(f(a))
+
+      case PostfixF(p) =>
+        next >>= fn(a) => p >>= fn(f) => pure(f(a))
+    })
+
+    .foldl(fn(acc, b) => b <|> acc, next)
+
+
+fn build_expression_parser<A extends equality>(ops: [[OperatorFunction<A>]], next: Parser<A>): Parser<A> =>
+  ops.foldl(fn(next, ops) => parseOperators(ops, next), next)

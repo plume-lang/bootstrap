@@ -1,0 +1,103 @@
+require "mod:thomasvergne/plume-combinator"
+require "mod:thomasvergne/plume-combinator/library/char"
+require "expression/literal"
+require "expression"
+require "operator"
+
+fn lex_char(c) => character(c).lex()
+fn lex_string(s) => string(s).lex()
+fn parens<A>(p: Parser<A>) => p.between(lex_char('('), lex_char(')'))
+
+parseString = (character('"') >> many(none_of(['"'])) << character('"')) >>= 
+  fn (chars) => pure(chars.implode())
+
+parseNumber = character('-').optional() >>= 
+  fn (sign) => many1(digit) >>= 
+    fn (digits) {
+      number = digits.implode().ffi_to_int()
+
+      if (sign.is_some()) {
+        return pure(number.negate())
+      } else {
+        return pure(number)
+      }
+    }
+
+parseFloat  = parseNumber >>= 
+  fn (real) =>
+    character('.') >> many1(digit) >>= 
+      fn (fraction) {
+        number = fraction.implode()
+        real_str = real.to_string()
+
+        final = real_str + "." + number
+
+        return pure(final.ffi_to_float())
+      }
+
+parseLiteral = parseString.map(String) 
+            <|> parseFloat.map(Float).try() 
+            <|> parseNumber.map(Integer)
+
+varIdentifier = identifier.map(implode)
+
+parseVariable = varIdentifier.map(Variable)
+
+declare parseExpression: fn(): Parser<Expression>
+
+parseCallee = parseVariable
+
+parseArguments = parseExpression
+  .lazy()
+  .sep_by(lex_char(','))
+  .parens()
+
+parseApplication = parseCallee >>=
+  fn (callee) => many1(parseArguments) >>=
+    fn (argss) =>
+      pure(argss.foldl(
+        fn (callee, args) => Application(callee, args), 
+        callee
+      ))
+
+parseLambda = lex_string(['f', 'n']) >> varIdentifier
+  .sep_by(lex_char(','))
+  .parens() >>= 
+    fn (params) => parseExpression.lazy() >>= 
+      fn (body) => pure(Lambda(params, body))
+
+parseTerm =
+  choice([
+    parseLiteral.map(Literal),
+    parseApplication,
+    parseVariable,
+    parseLambda,
+    parseExpression.lazy().parens()
+  ])
+
+fn parseExpression() =>
+  build_expression_parser([
+    [
+      InfixF(
+        lex_char('^') >> pure(fn (a, b) => Application(Variable("^"), [a, b]))
+      )
+    ],
+    [
+      InfixF(
+        lex_char('*') >> pure(fn (a, b) => Application(Variable("*"), [a, b]))
+      ),
+      InfixF(
+        lex_char('/') >> pure(fn (a, b) => Application(Variable("/"), [a, b]))
+      )
+    ],
+    [
+      InfixF(
+        lex_char('+') >> pure(fn (a, b) => Application(Variable("+"), [a, b]))
+      ),
+      InfixF(
+        lex_char('-') >> pure(fn (a, b) => Application(Variable("-"), [a, b]))
+      )
+    ]
+  ], parseTerm)
+
+
