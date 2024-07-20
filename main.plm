@@ -1,0 +1,6 @@
+require "src/expression"
+require "src/parser"
+
+example = "x(x + 6) * 3".explode()
+
+println(parseExpression().run_parser(example))
