@@ -4,9 +4,7 @@ require "expression/literal"
 require "expression"
 require "operator"
 
-fn lex_char(c) => character(c).lex()
-fn lex_string(s) => string(s).lex()
-fn parens<A>(p: Parser<A>) => p.between(lex_char('('), lex_char(')'))
+mut operators: list<Operator> = []
 
 parseString = (character('"') >> many(none_of(['"'])) << character('"')) >>= 
   fn (chars) => pure(chars.implode())
@@ -22,6 +20,9 @@ parseNumber = character('-').optional() >>=
         return pure(number)
       }
     }
+
+natural = many1(digit) >>= fn (digits) =>
+  pure(digits.implode().ffi_to_int())
 
 parseFloat  = parseNumber >>= 
   fn (real) =>
@@ -45,20 +46,10 @@ parseVariable = varIdentifier.map(Variable)
 
 declare parseExpression: fn(): Parser<Expression>
 
-parseCallee = parseVariable
-
 parseArguments = parseExpression
   .lazy()
   .sep_by(lex_char(','))
   .parens()
-
-parseApplication = parseCallee >>=
-  fn (callee) => many1(parseArguments) >>=
-    fn (argss) =>
-      pure(argss.foldl(
-        fn (callee, args) => Application(callee, args), 
-        callee
-      ))
 
 parseLambda = lex_string(['f', 'n']) >> varIdentifier
   .sep_by(lex_char(','))
@@ -69,14 +60,17 @@ parseLambda = lex_string(['f', 'n']) >> varIdentifier
 parseTerm =
   choice([
     parseLiteral.map(Literal),
-    parseApplication,
     parseVariable,
     parseLambda,
     parseExpression.lazy().parens()
   ])
 
-fn parseExpression() =>
-  build_expression_parser([
+fn parseExpression() {
+  ops = (*operators).sort_on(fn(a, b) => switch (a, b) {
+    case (Operator(_, _, prec1), Operator(_, _, prec2)) => prec1 < prec2
+  }).map(fn(op) => [parseCustomOperator(op)])
+
+  return build_expression_parser(list_concat(ops, [
     [
       InfixF(
         lex_char('^') >> pure(fn (a, b) => Application(Variable("^"), [a, b]))
@@ -97,7 +91,41 @@ fn parseExpression() =>
       InfixF(
         lex_char('-') >> pure(fn (a, b) => Application(Variable("-"), [a, b]))
       )
+    ],
+    [
+      PostfixF(parseArguments >>= fn (args) => 
+        pure(fn (callee) =>
+          Application(callee, args)
+        )
+      )
     ]
-  ], parseTerm)
+  ]), parseTerm)
+}
 
+parseOperatorDefinition = 
+  choice([
+    lex_str("infix") >> pure(Infix),
+    lex_str("prefix") >> pure(Prefix),
+    lex_str("postfix") >> pure(Postfix)
+  ]) >>= fn (ty) =>
+    parseOp >>= fn (name) =>
+      natural >>= fn (prec) {
+        operators = *operators + [Operator(ty, name.implode(), prec)]
+        return pure(None)
+      }
 
+parseTopFunction = 
+  lex_str("fn") >> varIdentifier >>= fn (id) =>
+    varIdentifier.sep_by(lex_char(',')).parens() >>= fn (args) => 
+      lex_str("=>") >> parseExpression.lazy() >>= 
+        fn (body) => pure(Definition(id, Lambda(args, body)))
+
+parseToplevel = choice([
+  parseOperatorDefinition,
+  parseTopFunction.map(Some),
+  parseExpression.lazy().map(Expression).map(Some)
+])
+
+scn = (newline <|> space).many()
+
+parseProgram = parseToplevel.sep_by(scn).map(nub_maybe).between(scn, scn)

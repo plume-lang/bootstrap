@@ -7,12 +7,24 @@ type Expression {
   Lambda(list<str>, Expression)
 }
 
+type Toplevel {
+  Expression(Expression),
+  Definition(str, Expression)
+}
+
 extend show<Expression> {
   fn show_prec(x, _) => switch x {
     case Variable(name) => name
     case Literal(lit) => show(lit)
     case Application(f, args) => show(f) + "(" + join_str(args.map(show), ", ") + ")"
     case Lambda(params, body) => "fn(" + join_str(params, ", ") + ") => " + show(body)
+  }
+}
+
+extend show<Toplevel> {
+  fn show_prec(x, _) => switch x {
+    case Expression(expr) => show(expr)
+    case Definition(name, expr) => name + " = " + expr.show()
   }
 }
 
@@ -26,6 +38,16 @@ extend equality<Expression> {
       f1 == f2 and args1 == args2
     case (Lambda(params1, body1), Lambda(params2, body2)) => 
       params1 == params2 and body1 == body2
+    case _ => false
+  }
+}
+
+extend equality<Toplevel> {
+  fn (==) (x, y) => switch (x, y) {
+    case (Expression(a), Expression(b)) => 
+      a == b
+    case (Definition(a, b), Definition(c, d)) => 
+      a == c and b == d
     case _ => false
   }
 }

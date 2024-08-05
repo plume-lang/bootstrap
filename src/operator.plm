@@ -1,9 +1,45 @@
 require "mod:thomasvergne/plume-combinator"
+require "expression"
 
 type OperatorFunction<A> {
   InfixF(Parser<fn(A, A): A>),
   PrefixF(Parser<fn(A): A>),
   PostfixF(Parser<fn(A): A>)
+}
+
+fn lex_char(c) => character(c).lex()
+fn lex_string(s) => string(s).lex()
+fn parens<A>(p: Parser<A>) => p.between(lex_char('('), lex_char(')'))
+
+fn lex_str(s) => lex_string(s.explode())
+
+type OperatorType {
+  Infix,
+  Prefix,
+  Postfix
+}
+
+type OperatorName = str
+type Precedence = int
+
+type Operator {
+  Operator(OperatorType, OperatorName, Precedence)
+}
+
+fn parseCustomOperator(op: Operator) => switch op {
+  case Operator(ty, name, prec) => switch ty {
+    case Infix => InfixF(lex_string(name.explode()) >> pure(fn(x, y) =>
+      Application(Variable(name), [x, y])
+    ))
+
+    case Prefix => PrefixF(lex_string(name.explode()) >> pure(fn(x) =>
+      Application(Variable(name), [x])
+    ))
+
+    case Postfix => PostfixF(lex_string(name.explode()) >> pure(fn(x) =>
+      Application(Variable(name), [x])
+    ))
+  }
 }
 
 fn parseOperators<A extends equality>(ops: [OperatorFunction<A>], next: Parser<A>): Parser<A> =>
@@ -29,3 +65,64 @@ fn parseOperators<A extends equality>(ops: [OperatorFunction<A>], next: Parser<A
 
 fn build_expression_parser<A extends equality>(ops: [[OperatorFunction<A>]], next: Parser<A>): Parser<A> =>
   ops.foldl(fn(next, ops) => parseOperators(ops, next), next)
+
+extend show<Operator> {
+  fn show_prec(op, _) => switch op {
+    case Operator(Infix, name, prec) => name + " (" + prec.to_string() + ")"
+    case Operator(Prefix, name, prec) => name + " (" + prec.to_string() + ")"
+    case Operator(Postfix, name, prec) => name + " (" + prec.to_string() + ")"
+  }
+}
+
+extend show<OperatorType> {
+  fn show_prec(op, _) => switch op {
+    case Infix => "infix"
+    case Prefix => "prefix"
+    case Postfix => "postfix"
+  }
+}
+
+extend equality<OperatorType> {
+  fn (==) (a, b) => switch (a, b) {
+    case (Infix, Infix) => true
+    case (Postfix, Postfix) => true
+    case (Prefix, Prefix) => true
+    case ? => false
+  }
+}
+
+extend equality<Operator> {
+  fn (==) (a, b) => switch (a, b) {
+    case (Operator(t1, n1, p1), Operator(t2, n2, p2)) =>
+      t1 == t2 and n1 == n2 and p1 == p2
+  }
+}
+
+valid_operators = [
+    '!'
+  , '#'
+  , '$'
+  , '%'
+  , '&'
+  , '*'
+  , '+'
+  , '.'
+  , '/'
+  , '<'
+  , '='
+  , '>'
+  , '?'
+  , '@'
+  , '^'
+  , '|'
+  , '-'
+  , '~'
+]
+
+parseOp = one_of(valid_operators).many1().lex()
+
+extend ordering<Operator> {
+  fn (<) (a, b) => switch (a, b) {
+    case (Operator(_, _, p1), Operator(_, _, p2)) => p1 < p2
+  }
+}
