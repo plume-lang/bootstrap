@@ -1,0 +1,12 @@
+infix ! 7
+infix $ 5
+
+println("Hello world")
+
+
+  println("test")
+println("test" ! "test" $ 8)
+
+fn id(x) => x
+
+println((id(7))(9))
