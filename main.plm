@@ -1,6 +1,17 @@
 require "src/expression"
 require "src/parser"
 
-example = "x(x + 6) * 3".explode()
+require "std:io/file"
+require "std:io/async-js"
 
-println(parseExpression().run_parser(example))
+content = await read_file("example/main.plm")
+
+switch content {
+  case Some(content) {
+    res = parseProgram.parse(content.explode()).or_else([])
+
+    res.map(println)
+  }
+
+  case None => println("File not found")
+}
