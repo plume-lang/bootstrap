@@ -93,9 +93,9 @@ fn parseExpression() {
       )
     ],
     [
-      PostfixF(parseArguments >>= fn (args) => 
+      PostfixF(parseArguments.many1() >>= fn (argss) => 
         pure(fn (callee) =>
-          Application(callee, args)
+          argss.foldl(fn(acc, args) => Application(acc, args), callee)
         )
       )
     ]
