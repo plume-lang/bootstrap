@@ -9,4 +9,4 @@ println("test" ! "test" $ 8)
 
 fn id(x) => x
 
-println((id(7))(9))
+println(id(7)(9))
