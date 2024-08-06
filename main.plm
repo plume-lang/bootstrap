@@ -4,7 +4,7 @@ require "src/parser"
 require "std:io/file"
 require "std:io/async-js"
 
-content = await read_file("example/main.plm")
+content = read_file("example/main.plm")
 
 switch content {
   case Some(content) {
