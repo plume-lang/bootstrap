@@ -24,7 +24,7 @@ parseNumber = character('-').optional() >>=
 natural = many1(digit) >>= fn (digits) =>
   pure(digits.implode().ffi_to_int())
 
-parseFloat  = parseNumber >>= 
+parseFloat = parseNumber >>= 
   fn (real) =>
     character('.') >> many1(digit) >>= 
       fn (fraction) {
@@ -65,7 +65,7 @@ parseTerm =
     parseExpression.lazy().parens()
   ])
 
-fn parseExpression() {
+fn parseExpression(): Parser<Expression> {
   ops = (*operators).sort_on(fn(a, b) => switch (a, b) {
     case (Operator(_, _, prec1), Operator(_, _, prec2)) => prec1 < prec2
   }).map(fn(op) => [parseCustomOperator(op)])
@@ -110,7 +110,7 @@ parseOperatorDefinition =
   ]) >>= fn (ty) =>
     parseOp >>= fn (name) =>
       natural >>= fn (prec) {
-        operators = *operators + [Operator(ty, name.implode(), prec)]
+        operators += [Operator(ty, name.implode(), prec)]
         return pure(None)
       }
 
@@ -128,4 +128,7 @@ parseToplevel = choice([
 
 scn = (newline <|> space).many()
 
-parseProgram = parseToplevel.sep_by(scn).map(nub_maybe).between(scn, scn)
+parseProgram = parseToplevel
+  .sep_by(scn)
+  .map(nub_maybe)
+  .between(scn, scn)
