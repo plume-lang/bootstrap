@@ -7,6 +7,6 @@ println("Hello world")
   println("test")
 println("test" ! "test" $ 8)
 
-fn id(x) => x
+fn id(x: str): int => x
 
 println(id(7)(9))
