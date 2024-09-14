@@ -1,26 +1,60 @@
 pub require "expression/literal"
+pub require "expression/type"
 require "mod:thomasvergne/plume-combinator"
 
+type Annotation<A> {
+  Annotated(str, A)
+}
+
 type Expression {
-  Variable(str),
+  Variable(Annotation<Option<Type>>),
   Literal(Literal),
   Application(Expression, list<Expression>),
-  Lambda(list<str>, Expression),
+  Lambda(list<Annotation<Option<Type>>>, Option<Type>, Expression),
   Locate(Expression, (Location, Location))
 }
 
 type Toplevel {
   Expression(Expression),
-  Definition(str, Expression)
+  Definition(Annotation<Type>, Expression)
+}
+
+extend<A extends show> show<Annotation<Option<A>>> {
+  fn show_prec(x, _) => switch x {
+    case Annotated(name, annot) => switch annot {
+      case Some(ty) => name + ": " + ty.show()
+      case None => name.show()
+    }
+  }
+}
+
+extend show<Annotation<Type>> {
+  fn show_prec(x, _) => switch x {
+    case Annotated(name, ty) => name + ": " + ty.show()
+  }
+}
+
+extend<A extends equality> equality<Annotation<A>> {
+  fn (==) (x, y) => switch (x, y) {
+    case (Annotated(a, b), Annotated(c, d)) => 
+      a == c and b == d
+  }
 }
 
 extend show<Expression> {
   fn show_prec(x, _) => switch x {
-    case Variable(name) => name
+    case Variable(name) => name.show()
     case Literal(lit) => show(lit)
     case Application(f, args) => show(f) + "(" + join_str(args.map(show), ", ") + ")"
-    case Lambda(params, body) => "fn(" + join_str(params, ", ") + ") => " + show(body)
-    case Locate(expr, loc) => "$expr at $loc"
+    case Lambda(params, ret1, body) {
+      ret = switch ret1 {
+        case Some(ty) => ": " + ty.show()
+        case None => ""
+      }
+
+      return "fn(" + join_str(params.map(show), ", ") + ")" + ret + " => " + show(body)
+    }
+    case Locate(expr, loc) => expr.show()
     case ? => "Unknown"
   }
 }
@@ -28,7 +62,7 @@ extend show<Expression> {
 extend show<Toplevel> {
   fn show_prec(x, _) => switch x {
     case Expression(expr) => show(expr)
-    case Definition(name, expr) => name + " = " + expr.show()
+    case Definition(name, expr) => name.show() + " = " + expr.show()
   }
 }
 
@@ -40,8 +74,8 @@ extend equality<Expression> {
       a == b
     case (Application(f1, args1), Application(f2, args2)) => 
       f1 == f2 and args1 == args2
-    case (Lambda(params1, body1), Lambda(params2, body2)) => 
-      params1 == params2 and body1 == body2
+    case (Lambda(params1, ret1, body1), Lambda(params2, ret2, body2)) => 
+      params1 == params2 and body1 == body2 and ret1 == ret2
     case (Locate(expr1, ?), Locate(expr2, ?)) =>
       expr1 == expr2
     case ? => false
