@@ -29,15 +29,15 @@ type Operator {
 fn parseCustomOperator(op: Operator): OperatorFunction<Expression> => switch op {
   case Operator(ty, name, prec) => switch ty {
     case Infix => InfixF(lex_string(name.explode()) >> pure(fn(x, y) =>
-      Application(Variable(name), [x, y])
+      Application(Variable(Annotated(name, None)), [x, y])
     ))
 
     case Prefix => PrefixF(lex_string(name.explode()) >> pure(fn(x) =>
-      Application(Variable(name), [x])
+      Application(Variable(Annotated(name, None)), [x])
     ))
 
     case Postfix => PostfixF(lex_string(name.explode()) >> pure(fn(x) =>
-      Application(Variable(name), [x])
+      Application(Variable(Annotated(name, None)), [x])
     ))
   }
 }
