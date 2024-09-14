@@ -1,0 +1,76 @@
+type QuVar = str
+type Level = int
+
+type TypeVariable {
+  Bound(QuVar, Level),
+  Link(Type)
+}
+
+type Type {
+  TypeApplication(Type, list<Type>),
+  TypeVariable(mut TypeVariable),
+  TypeIdentifier(str),
+  TypeQuantified(QuVar)
+}
+
+declare extend show<TypeVariable>
+declare extend show<Type>
+declare extend equality<TypeVariable>
+declare extend equality<Type>
+
+extend show<TypeVariable> {
+  fn show_prec(x, _) => switch x {
+    case Bound(name, level) => "$name!$level"
+    case Link(t) => show(t)
+  }
+}
+
+extend equality<TypeVariable> {
+  fn (==) (x, y) => switch (x, y) {
+    case (Bound(a, b), Bound(c, d)) => 
+      a == c and b == d
+    case (Link(a), Link(b)) => 
+      a == b
+    case _ => false
+  }
+}
+
+extend show<Type> {
+  fn show_prec(x, _) => switch x {
+    case TypeApplication(TypeApplication(TypeIdentifier("->"), args), [ret]) =>
+      "(" + join_str(args.map(show), ", ") + ") -> " + show(ret)
+    case TypeApplication(t, args) => show(t) + "<" + join_str(args.map(show), ", ") + ">"
+    case TypeVariable(tv) => tv->show()
+    case TypeIdentifier(name) => name
+    case TypeQuantified(name) => name
+  }
+}
+
+extend equality<Type> {
+  fn (==) (x, y) => switch (x, y) {
+    case (TypeApplication(a, b), TypeApplication(c, d)) => 
+      a == c and b == d
+    case (TypeVariable(a), TypeVariable(b)) => 
+      *a == *b
+    case (TypeIdentifier(a), TypeIdentifier(b)) => 
+      a == b
+    case (TypeQuantified(a), TypeQuantified(b)) => 
+      a == b
+    case ? => false
+  }
+}
+
+fn simplify_type(t: Type): Type => switch t {
+  case TypeApplication(a, as) => TypeApplication(simplify_type(a), as.map(simplify_type))
+  case TypeVariable(tv) => switch *tv {
+    case Bound(_, _) => TypeVariable(tv)
+    case Link(t2) { 
+      t3 = simplify_type(t2)
+      tv = Link(t3)
+
+      return t3
+    }
+  }
+  case TypeIdentifier(_) => t
+  case TypeQuantified(_) => t
+}
