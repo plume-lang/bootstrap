@@ -57,6 +57,12 @@ parseLambda = lex_string(['f', 'n']) >> varIdentifier
     fn (params) => parseExpression.lazy() >>= 
       fn (body) => pure(Lambda(params, body))
 
+fn locate(p: Parser<Expression>): Parser<Expression> =>
+  location >>= fn (l1) =>
+    p >>= fn (expr) =>
+      location >>= fn (l2) =>
+        pure(Locate(expr, (l1, l2)))
+
 parseTerm =
   choice([
     parseLiteral.map(Literal),
@@ -99,7 +105,7 @@ fn parseExpression(): Parser<Expression> {
         )
       )
     ]
-  ]), parseTerm)
+  ]), parseTerm).locate()
 }
 
 parseOperatorDefinition = 
