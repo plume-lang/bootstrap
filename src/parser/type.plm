@@ -1,0 +1,29 @@
+require "mod:thomasvergne/plume-combinator"
+require "mod:thomasvergne/plume-combinator/library/char"
+require "../expression/literal"
+require "../expression"
+require "../operator"
+
+fn angles<A>(p: Parser<A>): Parser<A> => p.between(lex_char('<'), lex_char('>'))
+
+declare parseType: fn(): Parser<Type>
+
+parseTypeId = identifier.map(implode).map(TypeIdentifier)
+parseTypeApp = identifier.map(implode) >>= 
+  fn (name) => parseType.lazy().sep_by(lex_char(',')).angles() >>= 
+    fn (args) => pure(TypeApplication(TypeIdentifier(name), args))
+parseTypeMut = lex_str("mut") >> parseType.lazy() >>= 
+  fn (t) => pure(TypeApplication(TypeIdentifier("mut"), [t]))
+parseTypeList = parseType
+  .lazy()
+  .between(lex_char('['), lex_char(']'))
+  .map(fn (t) => TypeApplication(TypeIdentifier("list"), [t]))
+
+fn parseType(): Parser<Type> => 
+  choice([
+    parseTypeApp,
+    parseTypeMut,
+    parseTypeList,
+    parseTypeId,
+    parseType.lazy().parens()
+  ])
