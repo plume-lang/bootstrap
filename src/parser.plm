@@ -4,6 +4,8 @@ require "expression/literal"
 require "expression"
 require "operator"
 
+require "parser/type"
+
 mut operators: list<Operator> = []
 
 parseString = (character('"') >> many(none_of(['"'])) << character('"')) >>= 
@@ -40,9 +42,18 @@ parseLiteral = parseString.map(String)
             <|> parseFloat.map(Float).try() 
             <|> parseNumber.map(Integer)
 
-varIdentifier = identifier.map(implode)
+varIdentifier = identifier.map(implode) >>= fn (id) =>
+  (lex_char(':') >> parseType()).optional() >>= 
+    fn (ty) => pure(Annotated(id, ty))
 
-parseVariable = varIdentifier.map(Variable)
+typedVarIdentifier = identifier.map(implode) >>= fn (id) =>
+  lex_char(':') >> parseType() >>= 
+    fn (ty) => pure(Annotated(id, ty))
+
+parseVariable = identifier
+  .map(implode)
+  .map(fn (x) => Annotated(x, None))
+  .map(Variable)
 
 declare parseExpression: fn(): Parser<Expression>
 
@@ -54,8 +65,9 @@ parseArguments = parseExpression
 parseLambda = lex_string(['f', 'n']) >> varIdentifier
   .sep_by(lex_char(','))
   .parens() >>= 
-    fn (params) => parseExpression.lazy() >>= 
-      fn (body) => pure(Lambda(params, body))
+    fn (params) => (lex_char(':') >> parseType()).optional() >>=
+      fn(ret) => parseExpression.lazy() >>= 
+        fn (body) => pure(Lambda(params, ret, body))
 
 fn locate(p: Parser<Expression>): Parser<Expression> =>
   location >>= fn (l1) =>
@@ -79,23 +91,23 @@ fn parseExpression(): Parser<Expression> {
   return build_expression_parser(list_concat(ops, [
     [
       InfixF(
-        lex_char('^') >> pure(fn (a, b) => Application(Variable("^"), [a, b]))
+        lex_char('^') >> pure(fn (a, b) => Application(Variable(Annotated("^", None)), [a, b]))
       )
     ],
     [
       InfixF(
-        lex_char('*') >> pure(fn (a, b) => Application(Variable("*"), [a, b]))
+        lex_char('*') >> pure(fn (a, b) => Application(Variable(Annotated("*", None)), [a, b]))
       ),
       InfixF(
-        lex_char('/') >> pure(fn (a, b) => Application(Variable("/"), [a, b]))
+        lex_char('/') >> pure(fn (a, b) => Application(Variable(Annotated("/", None)), [a, b]))
       )
     ],
     [
       InfixF(
-        lex_char('+') >> pure(fn (a, b) => Application(Variable("+"), [a, b]))
+        lex_char('+') >> pure(fn (a, b) => Application(Variable(Annotated("+", None)), [a, b]))
       ),
       InfixF(
-        lex_char('-') >> pure(fn (a, b) => Application(Variable("-"), [a, b]))
+        lex_char('-') >> pure(fn (a, b) => Application(Variable(Annotated("-", None)), [a, b]))
       )
     ],
     [
@@ -122,9 +134,17 @@ parseOperatorDefinition =
 
 parseTopFunction = 
   lex_str("fn") >> varIdentifier >>= fn (id) =>
-    varIdentifier.sep_by(lex_char(',')).parens() >>= fn (args) => 
-      lex_str("=>") >> parseExpression.lazy() >>= 
-        fn (body) => pure(Definition(id, Lambda(args, body)))
+    typedVarIdentifier.sep_by(lex_char(',')).parens() >>= fn (args) => 
+      lex_char(':') >> parseType() >>= fn (ty) =>
+        lex_str("=>") >> parseExpression.lazy() >>= 
+          fn (body) {
+            case Annotated(name, ?) = id
+            ty_args = args.map(fn case Annotated(?, ty) => ty)
+            fun_ty = TypeApplication(TypeApplication(TypeIdentifier("->"), ty_args), [ty])
+            fun_args = args.map(fn case Annotated(name, ty) => Annotated(name, Some(ty)))
+
+            return pure(Definition(Annotated(name, fun_ty), Lambda(fun_args, Some(ty), body)))
+          }
 
 parseToplevel = choice([
   parseOperatorDefinition,
